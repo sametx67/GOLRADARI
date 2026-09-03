@@ -1,15 +1,26 @@
 import os
-import requests
+import sys
+import subprocess
+
+# Kütüphaneler eksikse otomatik kuran sistem
+try:
+    from flask import Flask
+    import requests
+except ModuleNotFoundError:
+    print("Kütüphaneler eksik, otomatik kuruluyor...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "flask", "requests"])
+    from flask import Flask
+    import requests
+
 import time
 import threading
-from flask import Flask
 
-# Render için Flask Web Sunucusu (Port Hatasını Kesin Çözer)
+# Render Port Zorunluluğu İçin Flask Sunucusu
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Gol Radarı Aktif ve Çalışıyor!", 200
+    return "Gol Radari Aktif!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -18,7 +29,7 @@ def run_flask():
 # Web sunucusunu arka planda başlat
 threading.Thread(target=run_flask, daemon=True).start()
 
-# Bot Ayarları
+# Telegram Ayarları
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8656415127:AAHkqmZdW0b2NGzqRb-iRqhCkUNG4SwAN1w")
 CHAT_ID = "8210045794"
 
@@ -30,7 +41,7 @@ def telegram_bildir(mesaj):
     try:
         requests.post(url, data=payload, timeout=10)
     except Exception as e:
-        print("Telegram hatası:", e)
+        print("Telegram hatasi:", e)
 
 def gol_radari_tara():
     global bildirilen_baskilar
@@ -103,15 +114,15 @@ def gol_radari_tara():
             time.sleep(2)
 
     except Exception as e:
-        print("Tarama Hatası:", e)
+        print("Tarama Hatasi:", e)
 
-# Telegram Onay Bildirimi
-telegram_bildir("🚀 **Ücretsiz Gol Radarı Aktif!**\nFlask sunucusu bağlandı, Render port hatası çözüldü.")
+# Onay Bildirimi
+telegram_bildir("🚀 **Dakikasız Gol Radarı Tam Performans Devrede!**\nKütüphane ve port sorunları aşıldı, canlı maçlar taranıyor.")
 
 # Ana Tarama Döngüsü
 while True:
     try:
         gol_radari_tara()
     except Exception as e:
-        print("Döngü Hatası:", e)
-    time.sleep(60) 
+        print("Döngü Hatasi:", e)
+    time.sleep(60)
