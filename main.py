@@ -1,31 +1,25 @@
 import os
 import requests
 import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 import threading
 
-# Token'ı Render'ın güvenli kasasından çekiyoruz (GitHub engeline takılmaz)
+# 1. RENDER PORT BINDING (Erken kapanmayı önleyen sunucu)
+def start_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
+    print(f"Port {port} dinleniyor...")
+    server.serve_forever()
+
+# Port dinleyicisini Python başlar başlamaz ilk satırda çalıştır
+t = threading.Thread(target=start_server, daemon=True)
+t.start()
+
+# Environment variable'dan Token çek, yoksa varsayılanı kullan
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8656415127:AAHkqmZdW0b2NGzqRb-iRqhCkUNG4SwAN1w")
 CHAT_ID = "8210045794"
 
 bildirilen_baskilar = set()
-
-class SimpleHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"Gol Radari Aktif!")
-
-    def log_message(self, format, *args):
-        return
-
-def start_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
-    server.serve_forever()
-
-threading.Thread(target=start_server, daemon=True).start()
 
 def telegram_bildir(mesaj):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -34,7 +28,7 @@ def telegram_bildir(mesaj):
         res = requests.post(url, data=payload, timeout=10)
         print(f"Telegram Gönderim Yanıtı: {res.status_code}")
     except Exception as e:
-        print("Telegram hatasi:", e)
+        print("Telegram hatası:", e)
 
 def gol_radari_tara():
     global bildirilen_baskilar
@@ -47,12 +41,14 @@ def gol_radari_tara():
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
+            print(f"Maçkolik Bağlantı Hatası: {response.status_code}")
             return
 
         data = response.json()
         matches = data.get("data", [])
         
         canli_maclar = [m for m in matches if m.get("status", {}).get("isLive", False)]
+        print(f"🟢 Taranan Canlı Maç Sayısı: {len(canli_maclar)}")
 
         for mac in canli_maclar:
             mac_id = mac.get("id")
@@ -107,11 +103,16 @@ def gol_radari_tara():
             time.sleep(2)
 
     except Exception as e:
-        print("Tarama Hatasi:", e)
+        print("Tarama Hatası:", e)
 
-# Başlangıç bildirimi
-telegram_bildir("🚀 **Güvenli Gol Baskı Radarı Devrede!**\nGitHub token engeli aşıldı, canlı maçlar taranıyor.")
+# Uygulama başladığında Telegram bildirimini at
+print("🚀 Gol Radarı Başlatıldı!")
+telegram_bildir("🚀 **Dakikasız Gol Baskı Radarı Yayında!**\nSistem başarıyla kuruldu, 7/24 canlı maçlar taranıyor.")
 
+# Ana döngü
 while True:
-    gol_radari_tara()
+    try:
+        gol_radari_tara()
+    except Exception as e:
+        print("Döngü Hatası:", e)
     time.sleep(60)
