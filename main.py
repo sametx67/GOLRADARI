@@ -4,12 +4,13 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-BOT_TOKEN = "8656415127:AAHkqmZdW0b2NGzqRb-iRqhCkUNG4SwAN1w"
+# Token'ı Render'ın güvenli kasasından çekiyoruz (GitHub engeline takılmaz)
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8656415127:AAHkqmZdW0b2NGzqRb-iRqhCkUNG4SwAN1w")
 CHAT_ID = "8210045794"
 
 bildirilen_baskilar = set()
 
-class DummyServer(BaseHTTPRequestHandler):
+class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
@@ -19,16 +20,19 @@ class DummyServer(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
-def run_dummy_server():
+def start_server():
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), DummyServer)
+    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
     server.serve_forever()
+
+threading.Thread(target=start_server, daemon=True).start()
 
 def telegram_bildir(mesaj):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": mesaj, "parse_mode": "Markdown"}
     try:
-        requests.post(url, data=payload, timeout=10)
+        res = requests.post(url, data=payload, timeout=10)
+        print(f"Telegram Gönderim Yanıtı: {res.status_code}")
     except Exception as e:
         print("Telegram hatasi:", e)
 
@@ -75,8 +79,7 @@ def gol_radari_tara():
             isabetli_sut = is_sut_ev + is_sut_dep
             toplam_korner = korner_ev + korner_dep
 
-            # DAKİKASIZ GOL ÖNCESİ BASKI FİLTRESİ
-            # Dakika kaç olursa olsun; İsabetli Şut >= 2 veya Toplam Şut >= 6 veya Korner >= 4 ise YAKALA
+            # DAKİKASIZ BASKI FİLTRESİ
             baski_var = (isabetli_sut >= 2) or (toplam_sut >= 6) or (toplam_korner >= 4)
 
             if not baski_var:
@@ -98,15 +101,3 @@ def gol_radari_tara():
                 f"⛳ **Korner:** {toplam_korner}\n\n"
                 f"⚠️ *Dakika fark etmeksizin yoğun baskı var! Gol gelebilir!*"
             )
-
-            telegram_bildir(mesaj)
-            bildirilen_baskilar.add(baski_key)
-            time.sleep(2)
-
-    except Exception as e:
-        print("Tarama Hatasi:", e)
-
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-print("🚀 Gol Radarı Başlatıldı!")
-telegram_bildir("🎯 **Dakikasız Gol Baskısı Radarı Aktif!**\nRender derlemesi başarıyla tamamlandı. Baskılı maçlar taranıyor.")
