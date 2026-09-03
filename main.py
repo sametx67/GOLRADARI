@@ -114,4 +114,4 @@ while True:
         gol_radari_tara()
     except Exception as e:
         print("Döngü Hatası:", e)
-    time.sleep(60)
+    time.sleep(60) 
