@@ -7,15 +7,14 @@ import threading
 BOT_TOKEN = "8656415127:AAHkqmZdW0b2NGzqRb-iRqhCkUNG4SwAN1w"
 CHAT_ID = "8210045794"
 
-# Sinyal verilen maçları tekrar tekrar atmamak için hafıza
-bildirilen_sinyaller = set()
+bildirilen_baskilar = set()
 
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"Gol Sinyali Radari Aktif!")
+        self.wfile.write(b"Gol Radari Aktif!")
 
     def log_message(self, format, *args):
         return
@@ -31,107 +30,83 @@ def telegram_bildir(mesaj):
     try:
         requests.post(url, data=payload, timeout=10)
     except Exception as e:
-        print("Telegram hatası:", e)
+        print("Telegram hatasi:", e)
 
-def gol_sinyali_tara():
-    global bildirilen_sinyaller
-    url = "https://api.sofascore.com/api/v1/sport/football/events/live"
-    
-    # Sofascore engelini aşmak için gelişmiş tarayıcı kimliği
+def gol_radari_tara():
+    global bildirilen_baskilar
+    url = "https://m.mackolik.com/api/livematches"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.sofascore.com/"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Referer": "https://m.mackolik.com/"
     }
-    
+
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
-            print(f"API Bağlantı Durumu: {response.status_code}")
             return
 
-        events = response.json().get("events", [])
+        data = response.json()
+        matches = data.get("data", [])
         
-        for event in events:
-            event_id = event.get("id")
-            ev = event.get("homeTeam", {}).get("name", "Ev")
-            dep = event.get("awayTeam", {}).get("name", "Dep")
-            skor_ev = event.get("homeScore", {}).get("current", 0)
-            skor_dep = event.get("awayScore", {}).get("current", 0)
-            lig_adi = event.get("tournament", {}).get("name", "Canlı Lig")
-            dakika = event.get("time", {}).get("played", "Canlı")
+        canli_maclar = [m for m in matches if m.get("status", {}).get("isLive", False)]
 
-            # Maçın Detaylı Şut/Korner İstatistiğini Çek
-            stats_url = f"https://api.sofascore.com/api/v1/event/{event_id}/statistics"
-            stats_res = requests.get(stats_url, headers=headers, timeout=5)
+        for mac in canli_maclar:
+            mac_id = mac.get("id")
+            ev = mac.get("homeTeam", {}).get("name", "Ev")
+            dep = mac.get("awayTeam", {}).get("name", "Dep")
+            skor_ev = mac.get("score", {}).get("home", 0) or 0
+            skor_dep = mac.get("score", {}).get("away", 0) or 0
+            lig_adi = mac.get("league", {}).get("name", "Dünya Ligi")
+            dakika = mac.get("minute", "Canlı")
+
+            stats = mac.get("stats", {}) or {}
             
-            toplam_sut = 0
-            isabetli_sut = 0
-            korner = 0
-
-            if stats_res.status_code == 200:
-                stats_data = stats_res.json().get("statistics", [])
-                if stats_data:
-                    groups = stats_data[0].get("groups", [])
-                    for group in groups:
-                        for item in group.get("statisticsItems", []):
-                            name = item.get("name")
-                            h_val = int(item.get("home", 0))
-                            a_val = int(item.get("away", 0))
-                            
-                            if name == "Total shots":
-                                toplam_sut = h_val + a_val
-                            elif name == "Shots on target":
-                                isabetli_sut = h_val + a_val
-                            elif name == "Corner kicks":
-                                korner = h_val + a_val
-
-            # GOL ÖNCESİ SİNYAL ALGORİTMASI
-            sinyal_seviyesi = None
-            
-            # Çok Yüksek İhtimal
-            if isabetli_sut >= 4 or toplam_sut >= 9 or korner >= 6:
-                sinyal_seviyesi = "🔴 **ÇOK YÜKSEK GOL İHTİMALİ! (KALE ABLUKADA)**"
-            # Yüksek İhtimal
-            elif isabetli_sut >= 2 or toplam_sut >= 6 or korner >= 4:
-                sinyal_seviyesi = "🟡 **YÜKSEK GOL İHTİMALİ (BASKI ARTIYOR)**"
-
-            # Şartlar sağlanmıyorsa MAÇI ATLA, Telegram'a hiçbir şey atma
-            if not sinyal_seviyesi:
+            try:
+                top_sut_ev = int(stats.get("totalShotsHome", 0) or 0)
+                top_sut_dep = int(stats.get("totalShotsAway", 0) or 0)
+                is_sut_ev = int(stats.get("shotsOnTargetHome", 0) or 0)
+                is_sut_dep = int(stats.get("shotsOnTargetAway", 0) or 0)
+                korner_ev = int(stats.get("cornerKicksHome", 0) or 0)
+                korner_dep = int(stats.get("cornerKicksAway", 0) or 0)
+            except Exception:
                 continue
 
-            # Sinyal Anahtarı (Aynı maçın aynı skorundaki baskıyı 1 kere bildirir)
-            sinyal_key = f"{event_id}_{skor_ev}-{skor_dep}_{sinyal_seviyesi}"
+            toplam_sut = top_sut_ev + top_sut_dep
+            isabetli_sut = is_sut_ev + is_sut_dep
+            toplam_korner = korner_ev + korner_dep
 
-            if sinyal_key in bildirilen_sinyaller:
+            # DAKİKASIZ GOL ÖNCESİ BASKI FİLTRESİ
+            # Dakika kaç olursa olsun; İsabetli Şut >= 2 veya Toplam Şut >= 6 veya Korner >= 4 ise YAKALA
+            baski_var = (isabetli_sut >= 2) or (toplam_sut >= 6) or (toplam_korner >= 4)
+
+            if not baski_var:
+                continue
+
+            baski_key = f"{mac_id}_{skor_ev}-{skor_dep}_IS:{isabetli_sut}_TS:{toplam_sut}_K:{toplam_korner}"
+
+            if baski_key in bildirilen_baskilar:
                 continue
 
             mesaj = (
-                f"{sinyal_seviyesi}\n\n"
+                f"🔥 **GOL OLMA İHTİMALİ ÇOK YÜKSEK!**\n\n"
                 f"🏆 **Lig:** {lig_adi}\n"
                 f"⚽ **Maç:** {ev} {skor_ev} - {skor_dep} {dep}\n"
                 f"⏱️ **Dakika:** {dakika}'\n\n"
                 f"📊 **CANLI BASKI VERİLERİ:**\n"
-                f"🎯 **Isabetli Şut:** {isabetli_sut}\n"
+                f"🎯 **İsabetli Şut:** {isabetli_sut}\n"
                 f"🎯 **Toplam Şut:** {toplam_sut}\n"
-                f"⛳ **Korner:** {korner}\n\n"
-                f"💡 *Gol Olmadan Önce Canlı Bahis Sinyali!*"
+                f"⛳ **Korner:** {toplam_korner}\n\n"
+                f"⚠️ *Dakika fark etmeksizin yoğun baskı var! Gol gelebilir!*"
             )
 
             telegram_bildir(mesaj)
-            bildirilen_sinyaller.add(sinyal_key)
+            bildirilen_baskilar.add(baski_key)
             time.sleep(2)
 
     except Exception as e:
-        print("Sinyal Tarama Hatası:", e)
+        print("Tarama Hatasi:", e)
 
-# Web sunucusunu çalıştır
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-print("🚀 Gol Sinyali Radarı Başlatıldı!")
-telegram_bildir("🚨 **Gol Öncesi Canlı Bahis Sinyal Radarı Devrede!**\nSadece şut ve korner baskısı tavan yapan maçlar bildirilecek.")
-
-while True:
-    gol_sinyali_tara()
-    time.sleep(60) # Her 60 saniyede bir tüm canlı maçların istatistiklerini süzgeçten geçirir
+print("🚀 Gol Radarı Başlatıldı!")
+telegram_bildir("🎯 **Dakikasız Gol Baskısı Radarı Aktif!**\nRender derlemesi başarıyla tamamlandı. Baskılı maçlar taranıyor.")
