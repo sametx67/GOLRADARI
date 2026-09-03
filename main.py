@@ -101,3 +101,17 @@ def gol_radari_tara():
                 f"⛳ **Korner:** {toplam_korner}\n\n"
                 f"⚠️ *Dakika fark etmeksizin yoğun baskı var! Gol gelebilir!*"
             )
+
+            telegram_bildir(mesaj)
+            bildirilen_baskilar.add(baski_key)
+            time.sleep(2)
+
+    except Exception as e:
+        print("Tarama Hatasi:", e)
+
+# Başlangıç bildirimi
+telegram_bildir("🚀 **Güvenli Gol Baskı Radarı Devrede!**\nGitHub token engeli aşıldı, canlı maçlar taranıyor.")
+
+while True:
+    gol_radari_tara()
+    time.sleep(60)
